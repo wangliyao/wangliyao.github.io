@@ -40,5 +40,7 @@ expires_in : 凭证有效时间
  其他问题可参考微信开发手册
 #### 微信开发gem
 [微信支付gem:wx_pay](https://github.com/jasl/wx_pay)
+
 [微信开发常用gem:weixin_rails_middleware](https://github.com/lanrion/weixin_rails_middleware):这个gem运行命令可直接生成相应的基础功能（包括连接微信接口）
+
 [微信高级功能api实现gem:weixin_authorize](https://github.com/lanrion/weixin_authorize)
