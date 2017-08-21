@@ -36,3 +36,6 @@
 #### 上传附件的gem,应该算是很常用的gem，上传附件，两个都很强大，可以指定上传位置，上传文件类型，以及上传大小
 
 * gem ' Carrierwave 和 Paperclip'
+
+#### 短信开发接口gem，文档很清晰
+* gem  'china_sms'
