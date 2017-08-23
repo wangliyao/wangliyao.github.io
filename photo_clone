@@ -1,5 +1,4 @@
- `
-   if ARGV[0] != nil
+ ` if ARGV[0] != nil
   name = ARGV[0]
   binding.pry
   body = HTTP.get(name).body
@@ -24,4 +23,4 @@
 else
   puts 'no success'
 end
-` 
+ ` 
