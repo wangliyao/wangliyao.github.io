@@ -1,5 +1,6 @@
 
-``` if ARGV[0] != nil
+```ruby
+if ARGV[0] != nil
   name = ARGV[0]
   binding.pry
   body = HTTP.get(name).body
