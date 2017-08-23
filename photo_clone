@@ -1,0 +1,27 @@
+ `
+   if ARGV[0] != nil
+  name = ARGV[0]
+  binding.pry
+  body = HTTP.get(name).body
+  ans = []
+  while body != ''
+    html = body.readpartial
+    if html ==nil
+      break;
+    end
+    doc = Nokogiri::HTML(html)
+    doc.search('img').each do |i|
+      ans << i.attr('src') if i.attr('src') != nil
+    end
+  end
+  ans.each do |full_url|
+    #system "mkdir #{Dir.getwd}/photo "
+    cmd = system "wget -r #{Dir.getwd}/ #{full_url}"
+    puts '-' * 20
+    p cmd
+  end
+  puts 'success'
+else
+  puts 'no success'
+end
+` 
