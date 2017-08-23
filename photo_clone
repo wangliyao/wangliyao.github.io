@@ -1,4 +1,3 @@
-
 ```ruby
 if ARGV[0] != nil
   name = ARGV[0]
