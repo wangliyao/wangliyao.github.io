@@ -24,5 +24,4 @@ if ARGV[0] != nil
 else
   puts 'no success'
 end
-
 ```
