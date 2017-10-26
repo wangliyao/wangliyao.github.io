@@ -1,0 +1,14 @@
+ ## 使用gem  exception_notification 报错监控
+ config.action_mailer.smtp_settings = {
+      :address              => "smtp.163.com",
+      :port                 => 25,
+      :domain               => "163.com",
+      :user_name            => "username",
+      :password             => "password",
+  }
+
+  config.middleware.use ExceptionNotification::Rack,
+                        :email => {
+                            :sender_address => %{username},
+                            :exception_recipients => %w{'xxx@xxxmail.com'}
+                        }
