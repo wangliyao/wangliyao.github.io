@@ -1,0 +1,15 @@
+## 使用gem gem 'rack-cors', :require => 'rack/cors'
+
+* 跨域操作,api开发会遇到需要web前端调用接口,因此需要进行跨域
+
+```ruby
+middleware = Rails.application.config.middleware #这个定义一个中间键
+middleware.insert_before 0, Rack::Cors do
+  allow do
+    origins '*'
+    resource '*',
+             headers: :any,
+             methods: %i[get post put patch delete options head]
+  end
+end
+```
