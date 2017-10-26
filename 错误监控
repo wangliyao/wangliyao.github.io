@@ -1,4 +1,4 @@
- ## 使用gem  exception_notification 报错监控
+ ##使用gem  exception_notification 报错监控
  config.action_mailer.smtp_settings = {
       :address              => "smtp.163.com",
       :port                 => 25,
