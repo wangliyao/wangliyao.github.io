@@ -1,9 +1,6 @@
 # 个人简历
 
 ## 个人信息
-### 毕业院校
- * 杨凌职业技术学院
- * github技术博客:https://github.com/wangliyao/wangliyao.github.io
 ### 联系方式
  * 手机 18192835187
  * 邮箱 liyao.wangi@gmail.com
