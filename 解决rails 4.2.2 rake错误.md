@@ -38,4 +38,4 @@ namespace :db do
 end
   ```
   
-  具体回答 ![“pg_dump: invalid option — i” when migrating]（https://stackoverflow.com/questions/35999906/pg-dump-invalid-option-i-when-migrating）
+  具体回答 [“pg_dump: invalid option — i” when migrating]（https://stackoverflow.com/questions/35999906/pg-dump-invalid-option-i-when-migrating）
