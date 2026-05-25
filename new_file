@@ -1,0 +1,295 @@
+# 在您的 Rails 应用根目录运行以下命令
+cd /path/to/your/rails/app
+
+cat > diagnose_unicorn_hang.sh << 'SCRIPT_EOF'
+#!/bin/bash
+
+################################################################################
+# Unicorn Worker Hang Diagnosis Script
+# 用于诊断 Unicorn worker 在 40 秒后卡死的问题
+################################################################################
+
+set -e
+
+# 颜色定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# 日志函数
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+log_success() {
+    echo -e "${GREEN}[✓]${NC} $1"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[✗]${NC} $1"
+}
+
+log_section() {
+    echo ""
+    echo -e "${BLUE}================================${NC}"
+    echo -e "${BLUE}$1${NC}"
+    echo -e "${BLUE}================================${NC}"
+}
+
+# 获取 Rails 应用根目录
+get_rails_root() {
+    if [ -f "config/environment.rb" ]; then
+        pwd
+    elif [ -f "../config/environment.rb" ]; then
+        cd ..
+        pwd
+    elif [ -f "../../config/environment.rb" ]; then
+        cd ../..
+        pwd
+    else
+        log_error "Cannot find Rails application root. Please run this script from Rails app directory."
+        exit 1
+    fi
+}
+
+# 1. 列出所有 initializers
+list_initializers() {
+    log_section "第 1 步：列出所有 Initializers"
+    
+    if [ ! -d "config/initializers" ]; then
+        log_error "config/initializers directory not found"
+        return
+    fi
+    
+    count=$(ls config/initializers/*.rb 2>/dev/null | wc -l)
+    log_info "找到 $count 个 initializers"
+    echo ""
+    
+    ls -lh config/initializers/*.rb | awk '{print $9, "(" $5 ")"}'
+}
+
+# 2. 查找可疑代码
+find_suspicious_code() {
+    log_section "第 2 步：查找可疑代码"
+    
+    echo "=== 查找 Thread.new ==="
+    if grep -r "Thread.new" config/initializers/ 2>/dev/null; then
+        log_warn "找到后台线程！"
+    else
+        log_success "没有找到 Thread.new"
+    fi
+    
+    echo ""
+    echo "=== 查找 loop ==="
+    if grep -r "loop do\|loop {" config/initializers/ 2>/dev/null; then
+        log_warn "找到循环！"
+    else
+        log_success "没有找到 loop"
+    fi
+    
+    echo ""
+    echo "=== 查找 sleep ==="
+    if grep -r "^\s*sleep" config/initializers/ 2>/dev/null; then
+        log_warn "找到 sleep 调用！"
+    else
+        log_success "没有找到 sleep"
+    fi
+}
+
+# 3. 检查后台任务框架
+check_background_jobs() {
+    log_section "第 3 步：检查后台任务框架"
+    
+    if grep -q "sidekiq" Gemfile 2>/dev/null; then
+        log_warn "使用了 Sidekiq"
+        grep "sidekiq" Gemfile
+    else
+        log_success "未使用 Sidekiq"
+    fi
+    
+    if grep -q "delayed_job" Gemfile 2>/dev/null; then
+        log_warn "使用了 Delayed Job"
+        grep "delayed_job" Gemfile
+    else
+        log_success "未使用 Delayed Job"
+    fi
+    
+    if grep -q "redis" Gemfile 2>/dev/null; then
+        log_warn "使用了 Redis"
+        grep "redis" Gemfile | head -3
+    else
+        log_success "未使用 Redis"
+    fi
+}
+
+# 4. 基准测试（禁用所有 initializers）
+baseline_test() {
+    log_section "第 4 步：基准测试（禁用所有 initializers）"
+    
+    log_info "备份所有 initializers..."
+    for file in config/initializers/*.rb; do
+        [ -f "$file" ] && mv "$file" "$file.bak"
+    done
+    
+    log_info "运行 Rails（不加载任何 initializers）..."
+    start_time=$(date +%s%N)
+    if timeout 30 bundle exec rails runner "puts 'OK'" 2>&1 | tail -5; then
+        end_time=$(date +%s%N)
+        baseline_duration=$(( ($end_time - $start_time) / 1000000 ))
+        log_success "基准测试耗时: ${baseline_duration}ms"
+    else
+        log_error "基准测试超时或失败"
+    fi
+    
+    log_info "恢复所有 initializers..."
+    for file in config/initializers/*.rb.bak; do
+        [ -f "$file" ] && mv "$file" "${file%.bak}"
+    done
+}
+
+# 5. 逐个测试 initializers
+test_each_initializer() {
+    log_section "第 5 步：逐个启用 Initializers 并测试"
+    
+    report_file="/tmp/unicorn_diagnosis_report.txt"
+    > "$report_file"
+    
+    log_info "禁用所有 initializers..."
+    for file in config/initializers/*.rb; do
+        [ -f "$file" ] && mv "$file" "$file.disabled"
+    done
+    
+    echo "=== Initializer Performance Test ===" >> "$report_file"
+    echo "Time: $(date)" >> "$report_file"
+    echo "" >> "$report_file"
+    
+    for file in config/initializers/*.rb.disabled; do
+        [ ! -f "$file" ] && continue
+        
+        filename=$(basename "$file" .disabled)
+        mv "$file" "${file%.disabled}"
+        
+        log_info "Testing: $filename"
+        
+        start_time=$(date +%s%N)
+        output=$(timeout 45 bundle exec rails runner "puts 'OK'" 2>&1)
+        status=$?
+        end_time=$(date +%s%N)
+        duration=$(( ($end_time - $start_time) / 1000000 ))
+        
+        if [ $status -eq 124 ]; then
+            log_error "  ✗ TIMEOUT (> 45s) - PROBLEMATIC!"
+            echo "❌ $filename - TIMEOUT (> 45s) ***PROBLEMATIC***" >> "$report_file"
+            mv "${file}" "${file}.SLOW"
+        elif [ $status -ne 0 ]; then
+            log_error "  ✗ ERROR (exit code $status)"
+            echo "❌ $filename - ERROR" >> "$report_file"
+        else
+            log_success "  ✓ OK - ${duration}ms"
+            echo "✓ $filename - ${duration}ms" >> "$report_file"
+        fi
+        
+        mv "${file}" "${file}.disabled"
+    done
+    
+    log_info "恢复所有 initializers..."
+    for file in config/initializers/*.rb.disabled; do
+        [ -f "$file" ] && mv "$file" "${file%.disabled}"
+    done
+    
+    for file in config/initializers/*.rb.SLOW; do
+        [ -f "$file" ] && mv "$file" "${file%.SLOW}"
+    done
+    
+    log_success "Report saved to: $report_file"
+}
+
+# 6. 健康检查监控
+health_check_monitor() {
+    log_section "第 6 步：健康检查监控（60 秒）"
+    
+    log_info "Killing existing Unicorn processes..."
+    sudo pkill -9 -f unicorn 2>/dev/null || true
+    sleep 2
+    
+    if [ ! -f "/tmp/unicorn" ]; then
+        log_warn "Unicorn startup script not found at /tmp/unicorn"
+        return
+    fi
+    
+    log_info "Starting Unicorn..."
+    /tmp/unicorn start
+    sleep 5
+    
+    log_info "Running health check monitor for 60 seconds..."
+    echo ""
+    echo "Time      | Status | Workers | Progress"
+    echo "----------|--------|---------|----------"
+    
+    monitor_file="/tmp/unicorn_health_monitor.log"
+    > "$monitor_file"
+    
+    for i in {1..60}; do
+        timestamp=$(date '+%H:%M:%S')
+        response=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:80/health-check 2>/dev/null || echo "000")
+        worker_count=$(ps aux | grep "unicorn worker" | grep -v grep | wc -l)
+        progress=$((i * 100 / 60))
+        
+        status_icon="✓"
+        [ "$response" != "200" ] && status_icon="✗"
+        
+        printf "%s | %s %s | %d/4     | %3d%%\n" "$timestamp" "$response" "$status_icon" "$worker_count" "$progress"
+        echo "$timestamp | $response | $worker_count" >> "$monitor_file"
+        
+        sleep 1
+    done
+    
+    log_success "Monitor completed. Data saved to: $monitor_file"
+}
+
+# Main
+main() {
+    log_section "Unicorn Worker Hang Diagnosis Tool"
+    
+    RAILS_ROOT=$(get_rails_root)
+    cd "$RAILS_ROOT"
+    log_info "Rails root: $RAILS_ROOT"
+    
+    list_initializers
+    find_suspicious_code
+    check_background_jobs
+    baseline_test
+    test_each_initializer
+    health_check_monitor
+    
+    log_section "诊断完成"
+    
+    report_file="/tmp/unicorn_diagnosis_report.txt"
+    if [ -f "$report_file" ]; then
+        echo ""
+        log_info "=== 诊断报告摘要 ==="
+        
+        slow=$(grep "TIMEOUT" "$report_file" 2>/dev/null || echo "")
+        if [ ! -z "$slow" ]; then
+            log_error "Found problematic initializers:"
+            grep "TIMEOUT" "$report_file"
+        else
+            log_success "No timeout issues found"
+        fi
+        
+        echo ""
+        log_info "完整报告: $report_file"
+    fi
+}
+
+main
+exit 0
+SCRIPT_EOF
+
+chmod +x diagnose_unicorn_hang.sh
